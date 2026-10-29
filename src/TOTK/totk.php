@@ -322,7 +322,7 @@ class TOTK
                 || (! is_numeric($name) && ! str_starts_with(strtolower($ingredient['Euen name']), strtolower($name)) && ! str_ends_with(strtolower($ingredient['Euen name']), strtolower($name)) && str_contains(strtolower($ingredient['Euen name']), strtolower($name)))
                 )
             );});
-            if (! $materials->count()) $invalid_names = [$name];
+            if (! $materials->count()) $invalid_names[] = $name;
             else {
                 try { $ingredient = new Ingredient($this->materials_collection->get('Euen name', $materials->first()['Euen name'])); }
                 catch (\Error $e) {
@@ -345,18 +345,40 @@ class TOTK
         if ($valid_names) $embed->addFieldValues('Valid Ingredients',  implode(', ', $valid_names));
         if ($invalid_names) $embed->addFieldValues('Invalid Ingredients',  implode(', ', $invalid_names));
         if (isset($output['Meal'])) {
-            if (isset($output['Meal']['Euen name'])) $embed->addFieldValues('Recipe', $output['Meal']['Euen name'], true);
+            if (isset($output['Meal']['Euen name'])) $embed->addFieldValues('Euen name', $output['Meal']['Euen name'], true);
             if (isset($output['Meal']['Recipe n°'])) $embed->addFieldValues('Recipe n°', $output['Meal']['Recipe n°'], true);
             //$embed->addFieldValues('Required Ingredients', $output['Meal']['Recipe'], true);
-            if (isset($output['EffectType'])) $embed->addFieldValues('Effect Type', $output['EffectType']);
-            if (isset($output['EffectLevel'])) $embed->addFieldValues('Effect Type', $output['EffectLevel']);
-            if (isset($output['HitPointRepair'])) $embed->addFieldValues('Effect Type', $output['HitPointRepair']);
-            if (isset($output['ConfirmedTime'])) $embed->addFieldValues('Effect Type', $output['ConfirmedTime']);
-            if (isset($output['HitPointRecover'])) $embed->addFieldValues('Effect Type', $output['HitPointRecover']);
-            if (isset($output['LifeMaxUp'])) $embed->addFieldValues('Effect Type', $output['LifeMaxUp']);
-            if (isset($output['StaminaRecover'])) $embed->addFieldValues('Effect Type', $output['StaminaRecover']);
-            if (isset($output['ExStamina'])) $embed->addFieldValues('Effect Type', $output['ExStamina']);
-            if (isset($output['CriticalChance'])) $embed->addFieldValues('Effect Type', $output['CriticalChance']);
+            if (isset($output['EffectType'])) if ($output['EffectType'] !== 'None') $embed->addFieldValues('Effect Type', $output['EffectType'], true);
+            if (isset($output['EffectLevel'])) $embed->addFieldValues('Effect Level (Potency)', $output['EffectLevel'], true);
+            if (isset($output['Tier'])) $embed->addFieldValues('Tier', $output['Tier'], true);
+            if (isset($output['Duration'])) {
+                $duration = '';
+                $minutes = floor($output['Duration'] / 60);
+                $seconds = $output['Duration'] % 60;
+                if ($minutes > 0) $duration .= $minutes . 'm';
+                if ($seconds > 0) $duration .= $seconds . 's';
+                $embed->addFieldValues('Duration', $duration, true);
+            }
+            if (isset($output['HitPointRecover'])) $embed->addFieldValues('HitPointRecover (Quarter Hearts)', $output['HitPointRecover'], true);
+            if (isset($output['HitPointRepair'])) $embed->addFieldValues('HitPointRepair', $output['HitPointRepair'], true);
+            if (isset($output['LifeMaxUp'])) $embed->addFieldValues('Life Max Up', $output['LifeMaxUp'], true );
+            if (isset($output['StaminaRecover'])) $embed->addFieldValues('StaminaRecover (Degrees)', $output['StaminaRecover'], true);
+            if (isset($output['ExStamina'])) $embed->addFieldValues('ExStamina (Degrees)', $output['ExStamina'], true);
+            if (isset($output['CriticalChance'])) if ($output['CriticalChance'] != 0) {
+                $embed->addFieldValues('Critical Chance', $output['CriticalChance']);
+                $rand_effects = '+3 Hearts Recovery';
+                $rand_effects .= PHP_EOL . '+1 Temporary Heart';
+                if (isset($output['Duration'])) $rand_effects .= PHP_EOL . '+5 Minutes to Duration';
+                if (isset($output['Tier'])) $rand_effects .= PHP_EOL . 'Increase Tier Level';
+                if (isset($output['ExStamina']) || isset($output['ExStamina'])) $rand_effects .= PHP_EOL . '+2/5ths Stamina or Extra Stamina Wheel';
+                $embed->addFieldValues('Random Possible Critical Effects', $rand_effects);
+            }
+            if (isset($output['hasMonsterExtract'])) if ($output['hasMonsterExtract']) {
+                $extract_effects = '';
+                if (isset($output['HitPointRecover'])) if ($output['HitPointRecover']) $extract_effects .= 'Either set HitPointRecover to 1 OR add 12' . PHP_EOL;
+                if (isset($output['Duration'])) if ($output['Duration']) $extract_effects .= 'Set Duration to either 60, 600, or 1800';
+                if ($extract_effects) $embed->addFieldValues('Monster Extract Effects', $extract_effects);
+            }
             return $embed;
         }
         return 'Not implemented yet!'; //The recipe didn't result in a valid meal
@@ -379,36 +401,70 @@ class TOTK
         $embed->setFooter($this->embed_footer);
         $embed->setTitle('Recipe Lookup');
         //$ActorName = $meal['ActorName'] ?? '';
-        $EuenName = $meal['Euen name'] ?? '';
-        $Recipen° = $meal['Recipe n°'] ?? '';
-        $Recipes = [];
-        foreach ($meals as $m) if (isset($m['Recipe'])) $Recipes[] = $m['Recipe'];
+        //$EuenName = $meal['Euen name'] ?? '';
+        //$Recipen° = $meal['Recipe n°'] ?? '';
+        $EuenNames_original = [];
+        $Recipen°s_original = [];
+        $Recipes_original = [];
+        foreach ($meals as $m) {
+            if (isset($m['Euen name'])) $EuenNames_original[] = $m['Euen name'];
+            if (isset($m['Recipe n°'])) $Recipen°s_original[] = $m['Recipe n°'];
+            if (isset($m['Recipe'])) $Recipes_original[] = $m['Recipe'];
+        }
         $BonusHeart = $meal['BonusHeart'] ? $meal['BonusHeart'] : 0;
         $BonusLevel = $meal['BonusLevel'] ? $meal['BonusLevel'] : 0;
         $BonusTime = $meal['BonusTime'] ? $meal['BonusTime'] : 0;
 
-        $embed->addFieldValues('Search Term', "`$value`");
-        if ($EuenName) $embed->addFieldValues('Euen name', $EuenName);
-        if ($Recipen°) $embed->addFieldValues('Recipe n°', $Recipen°);
-        if ($Recipes) {
-            $EuenNames = [];
-            $Recipen°s = [];
-            $Recipen°Names = [];
-            $formatted_recipes = [];
-            $int = 1;
-            foreach ($Recipes as $recipe) {
-                if (!in_array($EuenName, $Recipen°Names)) {
-                    $Recipen°Names[] = $EuenName;
-                    $EuenNames[] = "$int: `$EuenName`";
-                    $Recipen°s[] = "$int: `$Recipen°`";
+        $embed->addFieldValues('Search Term', "$key: `$value`");
+        $EuenNames = [];
+        $EuenNames_strlen = 0;
+        $EuenNames_dupes = [];
+        $EuenNames_truncated = false;
+        $Recipen°s = [];
+        $Recipen°s_strlen = 0;
+        $Recipen°s_dupes = [];
+        $Recipen°s_truncated = false;
+        $formatted_recipes = [];
+        $formatted_recipes_strlen = 0;
+        $formatted_recipes_dupes = [];
+        $formatted_recipes_truncated = false;
+
+        $int = 1;
+        foreach ($EuenNames_original as $EuenName) {
+            if (($s = strlen(implode(PHP_EOL, $EuenNames) . ($str = "$int: `$EuenName`")) + $EuenNames_strlen) < 1024) {
+                if (! in_array($EuenName, $EuenNames_dupes)) {
+                    $EuenNames[] = $str;
+                    $EuenNames_strlen += $s;
+                    $EuenNames_dupes[] = $EuenName;
                 }
-                $formatted_recipes[] = "$int: `$recipe`";
-                $int++;
-            }
-            if ($EuenNames) $embed->addFieldValues('Euen name', implode(', ', $EuenNames), true);
-            if ($Recipen°s) $embed->addFieldValues('Recipe n°', implode(', ', $Recipen°s), true);
-            $embed->addFieldValues('Recipe', implode(PHP_EOL, $formatted_recipes));
+            } else $EuenNames_truncated = true;
+            $int++;
         }
+        $int = 1;
+        foreach ($Recipen°s_original as $Recipen°) {
+            if (($s = strlen(implode(PHP_EOL, $Recipen°s) . ($str = "$int: `$Recipen°`")) + $Recipen°s_strlen) < 1024) {
+                if (! in_array($Recipen°, $Recipen°s_dupes)) {
+                    $Recipen°s[] = $str;
+                    $Recipen°s_strlen += $s;
+                    $Recipen°s_dupes[] = $Recipen°;
+                }
+            } else $Recipen°s_truncated = true;
+            $int++;
+        }
+        $int = 1;
+        foreach ($Recipes_original as $Recipe) {
+            if (($s = strlen(implode(PHP_EOL, $formatted_recipes) . ($str = "$int: `$Recipe`")) + $formatted_recipes_strlen) < 1024) {
+                if (! in_array($Recipe, $formatted_recipes_dupes)) {
+                    $formatted_recipes[] = $str;
+                    $formatted_recipes_strlen += $s;
+                    $formatted_recipes_dupes[] = $Recipe;
+                }
+            } else $formatted_recipes_truncated = true;
+            $int++;
+        }
+        if ($EuenNames) $embed->addFieldValues($EuenNames_truncated ? 'Euen name (Truncated)' : 'Euen name', implode(PHP_EOL, $EuenNames), true);
+        if ($Recipen°s) $embed->addFieldValues($Recipen°s_truncated ? 'Recipe n° (Truncated)' : 'Recipe n°', implode(PHP_EOL, $Recipen°s), true);
+        if ($formatted_recipes) $embed->addFieldValues($formatted_recipes_truncated ? 'Recipe (Truncated)' : 'Recipe', implode(PHP_EOL, $formatted_recipes));
         if ($BonusHeart) $embed->addFieldValues('Bonus Heart', $BonusHeart, true);
         if ($BonusLevel) $embed->addFieldValues('Bonus Level', $BonusLevel, true);
         if ($BonusTime) $embed->addFieldValues('Bonus Time', $BonusTime, true);
@@ -443,21 +499,17 @@ class TOTK
         $embed->addFieldValues('Ingredient', $ingredient->getEuenName());
         $embed->addFieldValues('Classification', $ingredient->getClassification(), true);
         $embed->addFieldValues('BuyingPrice', $ingredient->getBuyingPrice(), true);
-        $embed->addFieldValues('SellingPrice', $ingredient->getSellingPrice(), true);
+        if ($ingredient->getSellingPrice()) $embed->addFieldValues('SellingPrice', $ingredient->getSellingPrice(), true);
         $embed->addFieldValues('Color', $ingredient->getColor(), true);
-        $embed->addFieldValues('AdditionalDamage', $ingredient->getAdditionalDamage(), true);
-        $embed->addFieldValues('EffectLevel', $ingredient->getEffectLevel(), true);
-        $embed->addFieldValues('EffectType', $ingredient->getEffectType(), true);
-        $embed->addFieldValues('Seasoning', $ingredient->getSeasoning(), true);
-        if (null !== $ingredient->getSeasoningBoost()) $embed->addFieldValues('SeasoningBoost', $ingredient->getSeasoningBoost(), true);
-        $embed->addFieldValues('AlwaysCrits', $ingredient->getAlwaysCrits(), true);
-        $embed->addFieldValues('ConfirmedTime', $ingredient->getConfirmedTime(), true);
-        $embed->addFieldValues('HitPointRecover', $ingredient->getHitPointRecover(), true);
-        $embed->addFieldValues('BoostEffectiveTime', $ingredient->getBoostEffectiveTime(), true);
-        $embed->addFieldValues('BoostHitPointRecover', $ingredient->getBoostHitPointRecover(), true);
-        $embed->addFieldValues('BoostMaxHeartLevel', $ingredient->getBoostMaxHeartLevel(), true);
-        $embed->addFieldValues('BoostStaminaLevel', $ingredient->getBoostStaminaLevel(), true);
-        $embed->addFieldValues('BoostSuccessRate', $ingredient->getBoostSuccessRate(), true);
+        if ($ingredient->getAdditionalDamage()) $embed->addFieldValues('AdditionalDamage', $ingredient->getAdditionalDamage(), true);
+        if ($ingredient->getEffectLevel()) $embed->addFieldValues('EffectLevel', $ingredient->getEffectLevel(), true);
+        if ($ingredient->getEffectType() !== 'None') $embed->addFieldValues('EffectType', $ingredient->getEffectType(), true);
+        if ($ingredient->getHitPointRecover()) $embed->addFieldValues('HitPointRecover', $ingredient->getHitPointRecover(), true);
+        if ($ingredient->getBoostEffectiveTime()) $embed->addFieldValues('BoostEffectiveTime', $ingredient->getBoostEffectiveTime(), true);
+        if ($ingredient->getBoostHitPointRecover()) $embed->addFieldValues('BoostHitPointRecover', $ingredient->getBoostHitPointRecover(), true);
+        if ($ingredient->getBoostMaxHeartLevel()) $embed->addFieldValues('BoostMaxHeartLevel', $ingredient->getBoostMaxHeartLevel(), true);
+        if ($ingredient->getBoostStaminaLevel()) $embed->addFieldValues('BoostStaminaLevel', $ingredient->getBoostStaminaLevel(), true);
+        if ($ingredient->getBoostSuccessRate()) $embed->addFieldValues('BoostSuccessRate', $ingredient->getBoostSuccessRate(), true);
         return $embed;
     }
 }

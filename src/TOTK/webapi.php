@@ -67,8 +67,12 @@ $webapi = new HttpServer($loop, function (ServerRequestInterface $request) use (
 
     $webpage_content = function ($return) use ($TOTK, $port, $sub) {
         ob_start();
-        include 'webapi_content.php';
-        return ob_get_clean();
+        try {
+            require __DIR__ . '/webapi_content.php';
+            return ob_get_contents();
+        } finally {
+            ob_end_clean();
+        }
     };
 
     switch ($sub) {

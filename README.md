@@ -54,6 +54,18 @@ See [main.php](main.php) for function examples.
 
 We are open to contributions, just open a pull request and we will review it.
 
+The web API template has offline regression checks. With PHP 8.0+ and Node.js
+installed, run:
+
+```sh
+php -n tests/webapi-template.php
+node tests/webapi-scripts.js
+```
+
+These checks render fixture data and parse the generated JavaScript. They do not
+load Composer dependencies or bot credentials, start the bot, or call control
+endpoints. Set `PHP_BINARY` to the PHP executable path if it is not on `PATH`.
+
 ## License
 
 MIT License, &copy; Valithor Obsidion and other contributers 2023-present.

@@ -1,0 +1,35 @@
+name: Web API template
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  offline-template:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.0', '8.5']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Lint tracked PHP files without executing bot code
+        shell: bash
+        run: |
+          while IFS= read -r -d '' file; do
+            php -n -l "$file"
+          done < <(git ls-files -z '*.php')
+      - name: Check template rendering without bot credentials or dependencies
+        run: php -n tests/webapi-template.php
+      - name: Check rendered JavaScript syntax without executing it
+        run: node tests/webapi-scripts.js
